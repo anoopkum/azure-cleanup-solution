@@ -1,0 +1,860 @@
+{
+  "definition": {
+    "$schema": "https://schema.management.azure.com/providers/Microsoft.Logic/schemas/2016-06-01/workflowdefinition.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+      "$connections": {
+        "defaultValue": {},
+        "type": "object"
+      },
+      "adminFallbackEmail": {
+        "type": "string",
+        "defaultValue": "admin@example.com;admin2@example.com;admin3@example.com;admin4@example.com;admin5@example.com"
+      }
+    },
+    "triggers": {
+      "Recurrence": {
+        "recurrence": {
+          "frequency": "Week",
+          "interval": 1,
+          "schedule": {
+            "weekDays": ["Friday"],
+            "hours": [23],
+            "minutes": [59]
+          },
+          "timeZone": "GMT Standard Time"
+        },
+        "type": "Recurrence"
+      }
+    },
+    "actions": {
+      "Initialize_deletedHTML": {
+        "runAfter": {},
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "deletedHTML",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "Initialize_failedHTML": {
+        "runAfter": {
+          "Initialize_deletedHTML": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "failedHTML",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "Initialize_warningHTML": {
+        "runAfter": {
+          "Initialize_failedHTML": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "warningHTML",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "Initialize_subSummaryHTML": {
+        "runAfter": {
+          "Initialize_warningHTML": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "subSummaryHTML",
+              "type": "string",
+              "value": ""
+            }
+          ]
+        }
+      },
+      "Initialize_totalCost": {
+        "runAfter": {
+          "Initialize_subSummaryHTML": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "totalCost",
+              "type": "float",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Initialize_deletedCount": {
+        "runAfter": {
+          "Initialize_totalCost": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "deletedCount",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Initialize_failedCount": {
+        "runAfter": {
+          "Initialize_deletedCount": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "failedCount",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Initialize_warningCount": {
+        "runAfter": {
+          "Initialize_failedCount": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "warningCount",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Initialize_lockedCount": {
+        "runAfter": {
+          "Initialize_warningCount": [
+            "Succeeded"
+          ]
+        },
+        "type": "InitializeVariable",
+        "inputs": {
+          "variables": [
+            {
+              "name": "lockedCount",
+              "type": "integer",
+              "value": 0
+            }
+          ]
+        }
+      },
+      "Get_Subscriptions": {
+        "runAfter": {
+          "Initialize_lockedCount": [
+            "Succeeded"
+          ]
+        },
+        "type": "Http",
+        "inputs": {
+          "uri": "https://management.azure.com/subscriptions?api-version=2022-12-01",
+          "method": "GET",
+          "authentication": {
+            "type": "ManagedServiceIdentity"
+          }
+        }
+      },
+      "Parse_Subscriptions": {
+        "runAfter": {
+          "Get_Subscriptions": [
+            "Succeeded"
+          ]
+        },
+        "type": "ParseJson",
+        "inputs": {
+          "content": "@body('Get_Subscriptions')",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "value": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "subscriptionId": {
+                      "type": "string"
+                    },
+                    "displayName": {
+                      "type": "string"
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Get_SubIds": {
+        "runAfter": {
+          "Parse_Subscriptions": [
+            "Succeeded"
+          ]
+        },
+        "type": "Select",
+        "inputs": {
+          "from": "@body('Parse_Subscriptions')['value']",
+          "select": "@item()['subscriptionId']"
+        }
+      },
+      "Query_Sub_Summary": {
+        "runAfter": {
+          "Get_SubIds": [
+            "Succeeded"
+          ]
+        },
+        "type": "Http",
+        "inputs": {
+          "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "subscriptions": "@body('Get_SubIds')",
+            "query": "resourcecontainers | where type == 'microsoft.resources/subscriptions/resourcegroups' | where subscriptionId !in ('00000000-0000-0000-0000-000000000000') | extend CreatedOn = todatetime(tags['CreatedDate']) | where isnotempty(CreatedOn) | extend AgeDays = datetime_diff('day', now(), CreatedOn) | summarize TotalRGs = count(), DeletionCandidates = countif(AgeDays >= 15), Warnings = countif(AgeDays >= 10 and AgeDays < 15), Safe = countif(AgeDays < 10) by subscriptionId | join kind=inner (resourcecontainers | where type == 'microsoft.resources/subscriptions' | project subscriptionId, SubName = name) on subscriptionId | project subscriptionId, SubName, TotalRGs, DeletionCandidates, Warnings, Safe | order by DeletionCandidates desc"
+          },
+          "authentication": {
+            "type": "ManagedServiceIdentity"
+          }
+        }
+      },
+      "Parse_Sub_Summary": {
+        "runAfter": {
+          "Query_Sub_Summary": [
+            "Succeeded"
+          ]
+        },
+        "type": "ParseJson",
+        "inputs": {
+          "content": "@body('Query_Sub_Summary')",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array"
+              }
+            }
+          }
+        }
+      },
+      "ForEach_Sub": {
+        "runAfter": {
+          "Parse_Sub_Summary": [
+            "Succeeded"
+          ]
+        },
+        "type": "Foreach",
+        "foreach": "@body('Parse_Sub_Summary')['data']",
+        "actions": {
+          "Get_Sub_Cost": {
+            "type": "Http",
+            "inputs": {
+              "uri": "https://management.azure.com/subscriptions/@{items('ForEach_Sub')['subscriptionId']}/providers/Microsoft.CostManagement/query?api-version=2023-03-01",
+              "method": "POST",
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "type": "ActualCost",
+                "timeframe": "MonthToDate",
+                "dataset": {
+                  "granularity": "None",
+                  "aggregation": {
+                    "totalCost": {
+                      "name": "Cost",
+                      "function": "Sum"
+                    }
+                  }
+                }
+              },
+              "authentication": {
+                "type": "ManagedServiceIdentity"
+              }
+            }
+          },
+          "Parse_Sub_Cost": {
+            "runAfter": {
+              "Get_Sub_Cost": [
+                "Succeeded",
+                "Failed"
+              ]
+            },
+            "type": "Compose",
+            "inputs": "@if(equals(outputs('Get_Sub_Cost')['statusCode'], 200), coalesce(body('Get_Sub_Cost')?['properties']?['rows']?[0]?[0], 0), 0)"
+          },
+          "Add_Sub_Row": {
+            "runAfter": {
+              "Parse_Sub_Cost": [
+                "Succeeded"
+              ]
+            },
+            "type": "AppendToStringVariable",
+            "inputs": {
+              "name": "subSummaryHTML",
+              "value": "<tr><td>@{items('ForEach_Sub')['SubName']}</td><td>@{items('ForEach_Sub')['TotalRGs']}</td><td style='background:#ffcdd2'>@{items('ForEach_Sub')['DeletionCandidates']}</td><td style='background:#fff3e0'>@{items('ForEach_Sub')['Warnings']}</td><td style='background:#c8e6c9'>@{items('ForEach_Sub')['Safe']}</td><td>$@{formatNumber(float(outputs('Parse_Sub_Cost')), 'N2')}</td></tr>"
+            }
+          }
+        }
+      },
+      "Query_RGs": {
+        "runAfter": {
+          "ForEach_Sub": [
+            "Succeeded"
+          ]
+        },
+        "type": "Http",
+        "inputs": {
+          "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
+          "method": "POST",
+          "headers": {
+            "Content-Type": "application/json"
+          },
+          "body": {
+            "subscriptions": "@body('Get_SubIds')",
+            "query": "resourcecontainers | where type == 'microsoft.resources/subscriptions/resourcegroups' | where subscriptionId !in ('00000000-0000-0000-0000-000000000000') | extend CreatedOn = todatetime(tags['CreatedDate']), CreatedBy = tostring(tags['Creator']) | where isnotempty(CreatedOn) | extend AgeDays = datetime_diff('day', now(), CreatedOn) | where AgeDays >= 10 | project id, name, subscriptionId, CreatedBy, AgeDays | order by AgeDays desc"
+          },
+          "authentication": {
+            "type": "ManagedServiceIdentity"
+          }
+        }
+      },
+      "Parse_RGs": {
+        "runAfter": {
+          "Query_RGs": [
+            "Succeeded"
+          ]
+        },
+        "type": "ParseJson",
+        "inputs": {
+          "content": "@body('Query_RGs')",
+          "schema": {
+            "type": "object",
+            "properties": {
+              "data": {
+                "type": "array"
+              },
+              "count": {
+                "type": "integer"
+              }
+            }
+          }
+        }
+      },
+      "ForEach_RG": {
+        "runAfter": {
+          "Parse_RGs": [
+            "Succeeded"
+          ]
+        },
+        "type": "Foreach",
+        "foreach": "@body('Parse_RGs')['data']",
+        "actions": {
+          "Set_Vars": {
+            "type": "Compose",
+            "inputs": {
+              "id": "@{items('ForEach_RG')['id']}",
+              "name": "@{items('ForEach_RG')['name']}",
+              "sub": "@{items('ForEach_RG')['subscriptionId']}",
+              "creator": "@{items('ForEach_RG')['CreatedBy']}",
+              "age": "@{items('ForEach_RG')['AgeDays']}"
+            }
+          },
+          "Get_Cost": {
+            "runAfter": {
+              "Set_Vars": [
+                "Succeeded"
+              ]
+            },
+            "type": "Http",
+            "inputs": {
+              "uri": "https://management.azure.com/subscriptions/@{outputs('Set_Vars')['sub']}/resourceGroups/@{outputs('Set_Vars')['name']}/providers/Microsoft.CostManagement/query?api-version=2023-03-01",
+              "method": "POST",
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "type": "ActualCost",
+                "timeframe": "MonthToDate",
+                "dataset": {
+                  "granularity": "None",
+                  "aggregation": {
+                    "totalCost": {
+                      "name": "Cost",
+                      "function": "Sum"
+                    }
+                  }
+                }
+              },
+              "authentication": {
+                "type": "ManagedServiceIdentity"
+              }
+            }
+          },
+          "Parse_Cost": {
+            "runAfter": {
+              "Get_Cost": [
+                "Succeeded",
+                "Failed"
+              ]
+            },
+            "type": "Compose",
+            "inputs": "@if(equals(outputs('Get_Cost')['statusCode'], 200), coalesce(body('Get_Cost')?['properties']?['rows']?[0]?[0], 0), 0)"
+          },
+          "Get_Resources": {
+            "runAfter": {
+              "Parse_Cost": [
+                "Succeeded"
+              ]
+            },
+            "type": "Http",
+            "inputs": {
+              "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
+              "method": "POST",
+              "headers": {
+                "Content-Type": "application/json"
+              },
+              "body": {
+                "subscriptions": "@body('Get_SubIds')",
+                "query": "resources | where resourceGroup =~ '@{outputs('Set_Vars')['name']}' and subscriptionId == '@{outputs('Set_Vars')['sub']}' | summarize count()"
+              },
+              "authentication": {
+                "type": "ManagedServiceIdentity"
+              }
+            }
+          },
+          "Parse_Resources": {
+            "runAfter": {
+              "Get_Resources": [
+                "Succeeded"
+              ]
+            },
+            "type": "Compose",
+            "inputs": "@coalesce(body('Get_Resources')?['data']?[0]?['count_'], 0)"
+          },
+          "Get_Locks": {
+            "runAfter": {
+              "Parse_Resources": [
+                "Succeeded"
+              ]
+            },
+            "type": "Http",
+            "inputs": {
+              "uri": "https://management.azure.com/subscriptions/@{outputs('Set_Vars')['sub']}/resourceGroups/@{outputs('Set_Vars')['name']}/providers/Microsoft.Authorization/locks?api-version=2016-09-01",
+              "method": "GET",
+              "authentication": {
+                "type": "ManagedServiceIdentity"
+              }
+            }
+          },
+          "Parse_Locks": {
+            "runAfter": {
+              "Get_Locks": [
+                "Succeeded",
+                "Failed"
+              ]
+            },
+            "type": "Compose",
+            "inputs": "@if(equals(outputs('Get_Locks')['statusCode'], 200), length(coalesce(body('Get_Locks')?['value'], json('[]'))), 0)"
+          },
+          "Check_Warning": {
+            "runAfter": {
+              "Parse_Locks": [
+                "Succeeded"
+              ]
+            },
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "greaterOrEquals": [
+                    "@int(outputs('Set_Vars')['age'])",
+                    10
+                  ]
+                },
+                {
+                  "less": [
+                    "@int(outputs('Set_Vars')['age'])",
+                    15
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Add_Warning_Row": {
+                "type": "AppendToStringVariable",
+                "inputs": {
+                  "name": "warningHTML",
+                  "value": "<tr style='background:#fff3e0'><td>@{outputs('Set_Vars')['name']}</td><td>@{outputs('Set_Vars')['creator']}</td><td>@{outputs('Set_Vars')['age']}</td><td>@{outputs('Parse_Resources')}</td><td>$@{formatNumber(float(outputs('Parse_Cost')), 'N2')}</td><td>@{sub(15, int(outputs('Set_Vars')['age']))} days</td></tr>"
+                }
+              },
+              "Inc_Warning": {
+                "runAfter": {
+                  "Add_Warning_Row": [
+                    "Succeeded"
+                  ]
+                },
+                "type": "IncrementVariable",
+                "inputs": {
+                  "name": "warningCount",
+                  "value": 1
+                }
+              },
+              "Send_Warning_Email": {
+                "runAfter": {
+                  "Inc_Warning": [
+                    "Succeeded"
+                  ]
+                },
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "contains": [
+                        "@outputs('Set_Vars')['creator']",
+                        "@"
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Get_Resource_List_Warning": {
+                    "type": "Http",
+                    "inputs": {
+                      "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
+                      "method": "POST",
+                      "headers": {
+                        "Content-Type": "application/json"
+                      },
+                      "body": {
+                        "subscriptions": "@body('Get_SubIds')",
+                        "query": "resources | where resourceGroup =~ '@{outputs('Set_Vars')['name']}' and subscriptionId == '@{outputs('Set_Vars')['sub']}' | project name, type | order by type asc"
+                      },
+                      "authentication": {
+                        "type": "ManagedServiceIdentity"
+                      }
+                    }
+                  },
+                  "Build_Resource_List_Warning": {
+                    "runAfter": {
+                      "Get_Resource_List_Warning": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "Select",
+                    "inputs": {
+                      "from": "@body('Get_Resource_List_Warning')?['data']",
+                      "select": "@concat(item()['name'], ' (', item()['type'], ')')"
+                    }
+                  },
+                  "Email_Creator_Warning": {
+                    "runAfter": {
+                      "Build_Resource_List_Warning": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "ApiConnection",
+                    "inputs": {
+                      "host": {
+                        "connection": {
+                          "name": "@parameters('$connections')['office365_template']['connectionId']"
+                        }
+                      },
+                      "method": "post",
+                      "path": "/v2/SharedMailbox/Mail",
+                      "body": {
+                        "MailboxAddress": "cleanup@example.com",
+                        "To": "@{outputs('Set_Vars')['creator']}",
+                        "Subject": "Azure Resource Cleanup Warning – Sandbox Environment",
+                        "Body": "<html><body style='font-family:Arial,sans-serif'><p>The following resource group and its associated resources in the sandbox environment are scheduled for deletion in <b>@{sub(15, int(outputs('Set_Vars')['age']))} days</b>.</p><p>Please note that the maximum resource lifecycle limit is <b>15 days</b>.</p><h3>Details:</h3><table style='border-collapse:collapse;margin:10px 0'><tr><td style='padding:5px 15px 5px 0'><b>Resource Group:</b></td><td>@{outputs('Set_Vars')['name']}</td></tr><tr><td style='padding:5px 15px 5px 0'><b>Creator:</b></td><td>@{outputs('Set_Vars')['creator']}</td></tr><tr><td style='padding:5px 15px 5px 0'><b>Age:</b></td><td>@{outputs('Set_Vars')['age']} days</td></tr></table><h3>Resources in this Resource Group:</h3><ul>@{if(equals(length(body('Build_Resource_List_Warning')), 0), '<li>No resources found</li>', concat('<li>', join(body('Build_Resource_List_Warning'), '</li><li>'), '</li>'))}</ul><p>Please review the resources and take any necessary action before the deletion date.</p><p style='color:#666;font-size:12px'>This is an automated message from Azure Cleanup Sandbox.</p></body></html>",
+                        "Importance": "High"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "Check_Deletion": {
+            "runAfter": {
+              "Check_Warning": [
+                "Succeeded",
+                "Skipped"
+              ]
+            },
+            "type": "If",
+            "expression": {
+              "and": [
+                {
+                  "greaterOrEquals": [
+                    "@int(outputs('Set_Vars')['age'])",
+                    15
+                  ]
+                }
+              ]
+            },
+            "actions": {
+              "Check_Locks": {
+                "type": "If",
+                "expression": {
+                  "and": [
+                    {
+                      "greater": [
+                        "@outputs('Parse_Locks')",
+                        0
+                      ]
+                    }
+                  ]
+                },
+                "actions": {
+                  "Add_Locked_Row": {
+                    "type": "AppendToStringVariable",
+                    "inputs": {
+                      "name": "deletedHTML",
+                      "value": "<tr style='background:#e1bee7'><td>@{outputs('Set_Vars')['name']}</td><td>@{outputs('Set_Vars')['creator']}</td><td>@{outputs('Set_Vars')['age']}</td><td>@{outputs('Parse_Resources')}</td><td>$@{formatNumber(float(outputs('Parse_Cost')), 'N2')}</td><td>🔒 LOCKED</td></tr>"
+                    }
+                  },
+                  "Inc_Locked": {
+                    "runAfter": {
+                      "Add_Locked_Row": [
+                        "Succeeded"
+                      ]
+                    },
+                    "type": "IncrementVariable",
+                    "inputs": {
+                      "name": "lockedCount",
+                      "value": 1
+                    }
+                  }
+                },
+                "else": {
+                  "actions": {
+                    "Get_Resource_List_Before_Delete": {
+                      "type": "Http",
+                      "inputs": {
+                        "uri": "https://management.azure.com/providers/Microsoft.ResourceGraph/resources?api-version=2021-03-01",
+                        "method": "POST",
+                        "headers": {
+                          "Content-Type": "application/json"
+                        },
+                        "body": {
+                          "subscriptions": "@body('Get_SubIds')",
+                          "query": "resources | where resourceGroup =~ '@{outputs('Set_Vars')['name']}' and subscriptionId == '@{outputs('Set_Vars')['sub']}' | project name, type | order by type asc"
+                        },
+                        "authentication": {
+                          "type": "ManagedServiceIdentity"
+                        }
+                      }
+                    },
+                    "Build_Resource_List_Delete": {
+                      "runAfter": {
+                        "Get_Resource_List_Before_Delete": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Select",
+                      "inputs": {
+                        "from": "@coalesce(body('Get_Resource_List_Before_Delete')?['data'], json('[]'))",
+                        "select": "@concat(item()['name'], ' (', item()['type'], ')')"
+                      }
+                    },
+                    "Delete_RG": {
+                      "runAfter": {
+                        "Build_Resource_List_Delete": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "Http",
+                      "inputs": {
+                        "uri": "https://management.azure.com@{outputs('Set_Vars')['id']}?api-version=2021-04-01",
+                        "method": "DELETE",
+                        "authentication": {
+                          "type": "ManagedServiceIdentity"
+                        }
+                      }
+                    },
+                    "Add_Deleted_Row": {
+                      "runAfter": {
+                        "Delete_RG": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "AppendToStringVariable",
+                      "inputs": {
+                        "name": "deletedHTML",
+                        "value": "<tr style='background:#c8e6c9'><td>@{outputs('Set_Vars')['name']}</td><td>@{outputs('Set_Vars')['creator']}</td><td>@{outputs('Set_Vars')['age']}</td><td>@{outputs('Parse_Resources')}</td><td>$@{formatNumber(float(outputs('Parse_Cost')), 'N2')}</td><td>✅ DELETED</td></tr>"
+                      }
+                    },
+                    "Inc_Deleted": {
+                      "runAfter": {
+                        "Add_Deleted_Row": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "IncrementVariable",
+                      "inputs": {
+                        "name": "deletedCount",
+                        "value": 1
+                      }
+                    },
+                    "Add_Cost": {
+                      "runAfter": {
+                        "Inc_Deleted": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "IncrementVariable",
+                      "inputs": {
+                        "name": "totalCost",
+                        "value": "@float(outputs('Parse_Cost'))"
+                      }
+                    },
+                    "Send_Deletion_Email": {
+                      "runAfter": {
+                        "Add_Cost": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "If",
+                      "expression": {
+                        "and": [
+                          {
+                            "contains": [
+                              "@outputs('Set_Vars')['creator']",
+                              "@"
+                            ]
+                          }
+                        ]
+                      },
+                      "actions": {
+                        "Email_Creator_Deleted": {
+                          "type": "ApiConnection",
+                          "inputs": {
+                            "host": {
+                              "connection": {
+                                "name": "@parameters('$connections')['office365_template']['connectionId']"
+                              }
+                            },
+                            "method": "post",
+                            "path": "/v2/SharedMailbox/Mail",
+                            "body": {
+                              "MailboxAddress": "cleanup@example.com",
+                              "To": "@{outputs('Set_Vars')['creator']}",
+                              "Subject": "Azure Resource Cleanup Deletion – Sandbox",
+                              "Body": "<html><body style='font-family:Arial,sans-serif'><p>The following resource group and its associated resources in the sandbox environment have been <b>deleted</b>.</p><p>The resource group exceeded the maximum lifecycle limit of <b>15 days</b>.</p><h3>Details:</h3><table style='border-collapse:collapse;margin:10px 0'><tr><td style='padding:5px 15px 5px 0'><b>Resource Group:</b></td><td>@{outputs('Set_Vars')['name']}</td></tr><tr><td style='padding:5px 15px 5px 0'><b>Creator:</b></td><td>@{outputs('Set_Vars')['creator']}</td></tr><tr><td style='padding:5px 15px 5px 0'><b>Age at deletion:</b></td><td>@{outputs('Set_Vars')['age']} days</td></tr><tr><td style='padding:5px 15px 5px 0'><b>Cost saved (MTD):</b></td><td>$@{formatNumber(float(outputs('Parse_Cost')), 'N2')}</td></tr></table><h3>Resources that were deleted:</h3><ul>@{if(equals(length(body('Build_Resource_List_Delete')), 0), '<li>No resources found</li>', concat('<li>', join(body('Build_Resource_List_Delete'), '</li><li>'), '</li>'))}</ul><p style='color:#666;font-size:12px'>This is an automated message from Azure Cleanup Sandbox.</p></body></html>",
+                              "Importance": "Normal"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "Add_Failed_Row": {
+                      "runAfter": {
+                        "Delete_RG": [
+                          "Failed"
+                        ]
+                      },
+                      "type": "AppendToStringVariable",
+                      "inputs": {
+                        "name": "failedHTML",
+                        "value": "<tr style='background:#ffcdd2'><td>@{outputs('Set_Vars')['name']}</td><td>@{outputs('Set_Vars')['creator']}</td><td>@{outputs('Set_Vars')['age']}</td><td>@{outputs('Parse_Resources')}</td><td>$@{formatNumber(float(outputs('Parse_Cost')), 'N2')}</td><td>❌ FAILED</td></tr>"
+                      }
+                    },
+                    "Inc_Failed": {
+                      "runAfter": {
+                        "Add_Failed_Row": [
+                          "Succeeded"
+                        ]
+                      },
+                      "type": "IncrementVariable",
+                      "inputs": {
+                        "name": "failedCount",
+                        "value": 1
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "Send_Report": {
+        "runAfter": {
+          "ForEach_RG": [
+            "Succeeded",
+            "Failed"
+          ]
+        },
+        "type": "ApiConnection",
+        "inputs": {
+          "host": {
+            "connection": {
+              "name": "@parameters('$connections')['office365_template']['connectionId']"
+            }
+          },
+          "method": "post",
+          "path": "/v2/SharedMailbox/Mail",
+          "body": {
+            "MailboxAddress": "cleanup@example.com",
+            "To": "@parameters('adminFallbackEmail')",
+            "Subject": "Azure Sandbox Cleanup Report - @{utcNow('yyyy-MM-dd')}",
+            "Body": "<html><head><style>body{font-family:Arial,sans-serif}table{border-collapse:collapse;width:100%;margin:15px 0}th,td{border:1px solid #ddd;padding:10px;text-align:left}th{background:#0078d4;color:white}.card{display:inline-block;padding:20px;margin:10px;border-radius:8px;text-align:center;min-width:120px}.card h2{margin:0;font-size:28px}.card p{margin:5px 0 0 0;font-size:12px}.green{background:#e8f5e9;color:#2e7d32}.red{background:#ffebee;color:#c62828}.orange{background:#fff3e0;color:#e65100}.blue{background:#e3f2fd;color:#1565c0}.purple{background:#f3e5f5;color:#7b1fa2}</style></head><body><h1>Azure Sandbox Cleanup Report</h1><p><b>Generated:</b> @{utcNow()}</p><h2>📊 Summary</h2><div class='card green'><h2>$@{formatNumber(variables('totalCost'), 'N2')}</h2><p>Cost Saved (MTD)</p></div><div class='card blue'><h2>@{body('Parse_RGs')['count']}</h2><p>Total RGs</p></div><div class='card green'><h2>@{variables('deletedCount')}</h2><p>Deleted</p></div><div class='card red'><h2>@{variables('failedCount')}</h2><p>Failed</p></div><div class='card purple'><h2>@{variables('lockedCount')}</h2><p>Locked</p></div><div class='card orange'><h2>@{variables('warningCount')}</h2><p>Warnings</p></div><h2>📈 By Subscription</h2><table><tr><th>Subscription</th><th>Total RGs</th><th>Deletion</th><th>Warnings</th><th>Safe</th><th>Cost (MTD)</th></tr>@{variables('subSummaryHTML')}</table><h2>🗑️ Deletion Candidates (≥15 days)</h2><table><tr><th>Resource Group</th><th>Creator</th><th>Age</th><th>Resources</th><th>Cost (MTD)</th><th>Status</th></tr>@{variables('deletedHTML')}</table><h2>❌ Failed Deletions</h2>@{if(equals(variables('failedCount'), 0), '<p style=\"color:green\">✅ No failures</p>', concat('<table><tr><th>Resource Group</th><th>Creator</th><th>Age</th><th>Resources</th><th>Cost (MTD)</th><th>Status</th></tr>', variables('failedHTML'), '</table>'))}<h2>⚠️ Warning RGs (10-14 days)</h2>@{if(equals(variables('warningCount'), 0), '<p>No warnings</p>', concat('<table><tr><th>Resource Group</th><th>Creator</th><th>Age</th><th>Resources</th><th>Cost (MTD)</th><th>Days Left</th></tr>', variables('warningHTML'), '</table>'))}</body></html>",
+            "Importance": "High"
+          }
+        }
+      }
+    }
+  },
+  "parameters": {
+    "adminFallbackEmail": {
+      "value": "admin@example.com;admin2@example.com;admin3@example.com;admin4@example.com;admin5@example.com"
+    },
+    "$connections": {
+      "value": {
+        "office365_template": {
+          "id": "/subscriptions/YOUR_SUBSCRIPTION_ID/providers/Microsoft.Web/locations/YOUR_LOCATION/managedApis/office365",
+          "connectionId": "/subscriptions/YOUR_SUBSCRIPTION_ID/resourceGroups/YOUR_RESOURCE_GROUP/providers/Microsoft.Web/connections/office365",
+          "connectionName": "office365-cleanup"
+        }
+      }
+    }
+  }
+}

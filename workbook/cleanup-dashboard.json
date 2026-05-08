@@ -1,0 +1,287 @@
+{
+  "version": "Notebook/1.0",
+  "items": [
+    {
+      "type": 1,
+      "content": {
+        "json": "# \ud83e\uddf9 Azure Sandbox Resource Cleanup Dashboard\n\nReal-time visibility into sandbox resource groups, age, cost, and cleanup status."
+      },
+      "name": "title"
+    },
+    {
+      "type": 9,
+      "content": {
+        "version": "KqlParameterItem/1.0",
+        "parameters": [
+          {
+            "id": "sub-param",
+            "version": "KqlParameterItem/1.0",
+            "name": "Subscriptions",
+            "type": 6,
+            "isRequired": true,
+            "multiSelect": true,
+            "quote": "'",
+            "delimiter": ",",
+            "typeSettings": {
+              "additionalResourceOptions": [
+                "value::all"
+              ],
+              "includeAll": true
+            },
+            "value": [
+              "value::all"
+            ]
+          }
+        ],
+        "style": "pills",
+        "queryType": 0
+      },
+      "name": "parameters"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## \ud83d\udcca Summary"
+      },
+      "name": "summary-title"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| summarize TotalRGs = count(), DeletionCandidates = countif(AgeDays >= 15), WarningRGs = countif(AgeDays >= 10 and AgeDays < 15), SafeRGs = countif(AgeDays < 10)",
+        "size": 4,
+        "title": "Resource Group Status",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "tiles",
+        "tileSettings": {
+          "showBorder": true,
+          "titleContent": {
+            "columnMatch": "Column1",
+            "formatter": 1
+          },
+          "leftContent": {
+            "columnMatch": "Column2",
+            "formatter": 12,
+            "formatOptions": {
+              "palette": "auto"
+            }
+          }
+        }
+      },
+      "name": "summary-tiles"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## \ud83d\udcc8 By Subscription (with Names)"
+      },
+      "name": "sub-title"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| summarize TotalRGs = count(), DeletionCandidates = countif(AgeDays >= 15), Warnings = countif(AgeDays >= 10 and AgeDays < 15), Safe = countif(AgeDays < 10) by subscriptionId\n| join kind=inner (\n    resourcecontainers\n    | where type == 'microsoft.resources/subscriptions'\n    | project subscriptionId, SubscriptionName = name\n) on subscriptionId\n| project SubscriptionName, TotalRGs, DeletionCandidates, Warnings, Safe\n| order by DeletionCandidates desc",
+        "size": 0,
+        "title": "By Subscription",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "DeletionCandidates",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "red",
+                "min": 0
+              }
+            },
+            {
+              "columnMatch": "Warnings",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "orange",
+                "min": 0
+              }
+            },
+            {
+              "columnMatch": "Safe",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "green",
+                "min": 0
+              }
+            },
+            {
+              "columnMatch": "TotalRGs",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            }
+          ]
+        }
+      },
+      "name": "sub-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## \ud83d\uddd1\ufe0f Deletion Candidates (\u226515 days)"
+      },
+      "name": "deletion-title"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate']), Creator = tostring(tags['Creator'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| where AgeDays >= 15\n| join kind=inner (\n    resourcecontainers\n    | where type == 'microsoft.resources/subscriptions'\n    | project subscriptionId, SubscriptionName = name\n) on subscriptionId\n| project ResourceGroup = name, Creator, AgeDays, CreatedOn = format_datetime(CreatedOn, 'yyyy-MM-dd'), SubscriptionName\n| order by AgeDays desc",
+        "size": 0,
+        "title": "Deletion Candidates",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "AgeDays",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "redGreen",
+                "min": 15,
+                "max": 100
+              }
+            }
+          ]
+        }
+      },
+      "name": "deletion-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## \u26a0\ufe0f Warning RGs (10-14 days)"
+      },
+      "name": "warning-title"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate']), Creator = tostring(tags['Creator'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| where AgeDays >= 10 and AgeDays < 15\n| join kind=inner (\n    resourcecontainers\n    | where type == 'microsoft.resources/subscriptions'\n    | project subscriptionId, SubscriptionName = name\n) on subscriptionId\n| project ResourceGroup = name, Creator, AgeDays, DaysUntilDeletion = 15 - AgeDays, SubscriptionName\n| order by AgeDays desc",
+        "size": 0,
+        "title": "Warning - Pending Deletion",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "DaysUntilDeletion",
+              "formatter": 8,
+              "formatOptions": {
+                "palette": "orangeRed",
+                "min": 1,
+                "max": 5
+              }
+            }
+          ]
+        }
+      },
+      "name": "warning-table"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "## \ud83d\udc64 By Creator"
+      },
+      "name": "creator-title"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate']), Creator = tostring(tags['Creator'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| where AgeDays >= 15\n| summarize TotalRGs = count(), OldestDays = max(AgeDays) by Creator\n| order by TotalRGs desc",
+        "size": 0,
+        "title": "Deletion Candidates by Creator",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "table",
+        "gridSettings": {
+          "formatters": [
+            {
+              "columnMatch": "TotalRGs",
+              "formatter": 4,
+              "formatOptions": {
+                "palette": "blue"
+              }
+            }
+          ]
+        }
+      },
+      "name": "creator-table"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate']), Creator = tostring(tags['Creator'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| where AgeDays >= 15\n| summarize Count = count() by Creator\n| order by Count desc\n| take 10",
+        "size": 0,
+        "title": "Top 10 Creators",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "piechart"
+      },
+      "customWidth": "50",
+      "name": "creator-pie"
+    },
+    {
+      "type": 3,
+      "content": {
+        "version": "KqlItem/1.0",
+        "query": "resourcecontainers\n| where type == 'microsoft.resources/subscriptions/resourcegroups'\n| where subscriptionId !in ('79c55d71-21c7-42c2-958c-0f8f744cfee3')\n| extend CreatedOn = todatetime(tags['CreatedDate'])\n| where isnotempty(CreatedOn)\n| extend AgeDays = datetime_diff('day', now(), CreatedOn)\n| summarize Count = count() by bin(AgeDays, 7)\n| order by AgeDays asc",
+        "size": 0,
+        "title": "Age Distribution (Weekly)",
+        "queryType": 1,
+        "resourceType": "microsoft.resourcegraph/resources",
+        "crossComponentResources": [
+          "{Subscriptions}"
+        ],
+        "visualization": "barchart"
+      },
+      "customWidth": "50",
+      "name": "age-chart"
+    },
+    {
+      "type": 1,
+      "content": {
+        "json": "---\n\n\ud83d\udca1 **Note:** Cost data requires Cost Management API which cannot be queried directly in Workbooks. Cost data is available in the Logic App email reports."
+      },
+      "name": "cost-note"
+    }
+  ],
+  "fallbackResourceIds": [
+    "Azure Monitor"
+  ]
+}
