@@ -6,8 +6,21 @@ param(
     [switch]$WhatIf = $false
 )
 
-$tenantId = "e2e605ca-a105-4b19-bcb9-5b1ca2d5ce71"
-$workspaceId = "48a05772-1646-4298-9598-e2699a746891"
+# ============================================
+# CONFIGURATION - UPDATE THESE VALUES
+# ============================================
+$tenantId = "YOUR_TENANT_ID"
+$workspaceId = "YOUR_LOG_ANALYTICS_WORKSPACE_ID"
+$defaultSubscriptionId = "YOUR_DEFAULT_SUBSCRIPTION_ID"
+
+# List of subscription IDs to scan
+$subscriptions = @(
+    "YOUR_SUBSCRIPTION_ID_1",
+    "YOUR_SUBSCRIPTION_ID_2",
+    "YOUR_SUBSCRIPTION_ID_3"
+    # Add more subscription IDs as needed
+)
+# ============================================
 
 Write-Host "Logging in to Azure tenant: $tenantId" -ForegroundColor Cyan
 Connect-AzAccount -TenantId $tenantId
@@ -18,7 +31,7 @@ if ($WhatIf) { Write-Host "WHATIF MODE - No changes will be made" -ForegroundCol
 # Step 1: Query ALL creators and creation times from Log Analytics
 Write-Host "`n[1/4] Querying Log Analytics for resource creators and creation times..." -ForegroundColor Yellow
 
-Set-AzContext -SubscriptionId "27320543-d2ea-4fd5-b361-0145cc56934b" -WarningAction SilentlyContinue | Out-Null
+Set-AzContext -SubscriptionId $defaultSubscriptionId -WarningAction SilentlyContinue | Out-Null
 
 $query = @"
 AzureActivity
@@ -63,19 +76,6 @@ Write-Host "  Resolved $($spNames.Count) service principals/MIs" -ForegroundColo
 
 # Step 3: Get all RGs and resources needing tags
 Write-Host "`n[3/4] Finding resources needing Creator or CreatedDate correction..." -ForegroundColor Yellow
-
-$subscriptions = @(
-    "ebf0db91-bfb3-4b64-a25a-c3342eb9cbc8",
-    "79c55d71-21c7-42c2-958c-0f8f744cfee3",
-    "f43b1ca7-0345-4069-8be5-ad3b3edaab85",
-    "8395734e-4998-4955-8336-56d2f18a8732",
-    "27320543-d2ea-4fd5-b361-0145cc56934b",
-    "3c31025e-bee4-4e89-9b66-5b0413992606",
-    "1c31a1ec-7511-4413-b012-7a9cdc68228f",
-    "44511bd8-e2f9-48d0-bfe0-ee653035e34d",
-    "33ae5b48-3339-4aa3-bb5a-22695a65db5f",
-    "5ed9830b-9ef4-4764-bfeb-f5aaa29bdd97"
-)
 
 $toTag = @()
 $today = (Get-Date).ToString("yyyy-MM-dd")
