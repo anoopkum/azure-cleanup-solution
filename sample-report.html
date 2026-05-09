@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Azure Sandbox Cleanup Report</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #f5f5f5;
+      padding: 20px;
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    .report-container {
+      background: white;
+      padding: 30px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    h1 {
+      color: #333;
+      margin-bottom: 5px;
+      font-size: 28px;
+    }
+    .generated {
+      color: #666;
+      font-size: 14px;
+      margin-bottom: 25px;
+    }
+    .section-title {
+      font-size: 18px;
+      font-weight: 600;
+      margin: 25px 0 15px 0;
+      color: #333;
+    }
+    .section-title::before {
+      content: "📊 ";
+    }
+    .summary-cards {
+      display: flex;
+      gap: 15px;
+      flex-wrap: wrap;
+      margin-bottom: 30px;
+    }
+    .card {
+      padding: 20px 30px;
+      border-radius: 8px;
+      text-align: center;
+      min-width: 100px;
+      border: 1px solid #e0e0e0;
+    }
+    .card-value {
+      font-size: 28px;
+      font-weight: bold;
+      display: block;
+    }
+    .card-label {
+      font-size: 12px;
+      color: #666;
+      margin-top: 5px;
+    }
+    .card-green { background: #e8f5e9; }
+    .card-green .card-value { color: #2e7d32; }
+    .card-blue { background: #e3f2fd; }
+    .card-blue .card-value { color: #1565c0; }
+    .card-lightblue { background: #e1f5fe; }
+    .card-lightblue .card-value { color: #0277bd; }
+    .card-red { background: #ffebee; }
+    .card-red .card-value { color: #c62828; }
+    .card-purple { background: #f3e5f5; }
+    .card-purple .card-value { color: #7b1fa2; }
+    .card-orange { background: #fff3e0; }
+    .card-orange .card-value { color: #ef6c00; }
+    
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 10px;
+    }
+    th {
+      background: #5c6bc0;
+      color: white;
+      padding: 12px 15px;
+      text-align: left;
+      font-weight: 600;
+    }
+    td {
+      padding: 12px 15px;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    tr:hover {
+      background: #f5f5f5;
+    }
+    .deletion { background: #ffcdd2 !important; }
+    .warning { background: #fff9c4 !important; }
+    .safe { background: #c8e6c9 !important; }
+    .cost { text-align: right; }
+    
+    .subscription-section .section-title::before {
+      content: "📋 ";
+    }
+  </style>
+</head>
+<body>
+  <div class="report-container">
+    <h1>Azure Sandbox Cleanup Report</h1>
+    <div class="generated">Generated: 2026-04-18T00:23:01.546Z</div>
+    
+    <div class="section-title">Summary</div>
+    <div class="summary-cards">
+      <div class="card card-green">
+        <span class="card-value">$1,863.34</span>
+        <span class="card-label">Cost Saved (MTD)</span>
+      </div>
+      <div class="card card-blue">
+        <span class="card-value">86</span>
+        <span class="card-label">Total RGs</span>
+      </div>
+      <div class="card card-lightblue">
+        <span class="card-value">48</span>
+        <span class="card-label">Deleted</span>
+      </div>
+      <div class="card card-red">
+        <span class="card-value">27</span>
+        <span class="card-label">Failed</span>
+      </div>
+      <div class="card card-purple">
+        <span class="card-value">4</span>
+        <span class="card-label">Locked</span>
+      </div>
+      <div class="card card-orange">
+        <span class="card-value">7</span>
+        <span class="card-label">Warnings</span>
+      </div>
+    </div>
+    
+    <div class="subscription-section">
+      <div class="section-title">By Subscription</div>
+      <table>
+        <thead>
+          <tr>
+            <th>Subscription</th>
+            <th>Total RGs</th>
+            <th>Deletion</th>
+            <th>Warnings</th>
+            <th>Safe</th>
+            <th>Cost (MTD)</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Sandbox-Dev-01</td>
+            <td>11</td>
+            <td class="deletion">6</td>
+            <td class="warning">2</td>
+            <td class="safe">3</td>
+            <td class="cost">$992.58</td>
+          </tr>
+          <tr>
+            <td>Sandbox-Test-02</td>
+            <td>23</td>
+            <td class="deletion">20</td>
+            <td class="warning">2</td>
+            <td class="safe">1</td>
+            <td class="cost">$1,140.79</td>
+          </tr>
+          <tr>
+            <td>Sandbox-QA-03</td>
+            <td>1</td>
+            <td class="deletion">1</td>
+            <td class="warning">0</td>
+            <td class="safe">0</td>
+            <td class="cost">$754.89</td>
+          </tr>
+          <tr>
+            <td>Sandbox-POC-04</td>
+            <td>11</td>
+            <td class="deletion">9</td>
+            <td class="warning">1</td>
+            <td class="safe">1</td>
+            <td class="cost">$223.42</td>
+          </tr>
+          <tr>
+            <td>Sandbox-Lab-05</td>
+            <td>45</td>
+            <td class="deletion">42</td>
+            <td class="warning">1</td>
+            <td class="safe">2</td>
+            <td class="cost">$2,117.61</td>
+          </tr>
+          <tr>
+            <td>Sandbox-Demo-06</td>
+            <td>2</td>
+            <td class="deletion">1</td>
+            <td class="warning">1</td>
+            <td class="safe">0</td>
+            <td class="cost">$83.81</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</body>
+</html>
